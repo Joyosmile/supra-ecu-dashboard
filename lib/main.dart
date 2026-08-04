@@ -203,7 +203,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           Row(
-            alignment: PlaceholderAlignment.baseline,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [
               Text(
