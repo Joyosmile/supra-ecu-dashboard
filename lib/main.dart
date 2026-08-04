@@ -41,9 +41,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   double speed = 0.0;
   double injDuration = 0.0; 
 
+  // Variabel Histori Ganda untuk Grafik
   List<FlSpot> rpmHistory = [];
+  List<FlSpot> tpsHistory = [];
   int dataCounter = 0;
   final int maxDataPoints = 30;
+
+  // Variabel Seleksi Grafik ('RPM' atau 'TPS')
+  String selectedGraph = "RPM";
 
   BluetoothConnection? connection;
   bool isConnected = false;
@@ -52,16 +57,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   final String targetDeviceName = "JAYA_TECH"; 
 
-  // Fungsi memeriksa apakah Bluetooth di HP aktif dan meminta izin jika mati
   void connectToESP32() async {
     if (isConnected) {
       disconnect();
       return;
     }
-
     setState(() { isConnecting = true; });
 
-    // Memastikan Bluetooth di HP dalam posisi ON
     bool? isBluetoothEnabled = await FlutterBluetoothSerial.instance.isEnabled;
     if (isBluetoothEnabled == false) {
       await FlutterBluetoothSerial.instance.requestEnable();
@@ -71,7 +73,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     try {
-      // Mengambil daftar perangkat yang sudah ter-pairing di HP
       List<BluetoothDevice> devices = await FlutterBluetoothSerial.instance.getBondedDevices();
       BluetoothDevice? esp32device;
 
@@ -89,20 +90,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
             isConnected = true;
             isConnecting = false;
             rpmHistory.clear(); 
+            tpsHistory.clear();
             dataCounter = 0;
           });
           showSnackBar("Terhubung ke Scanner ECU!");
 
           connection!.input!.listen(_onDataReceived).onDone(() {
             setState(() { isConnected = false; });
-            showSnackBar("Koneksi terputus dari perangkat.");
+            showSnackBar("Koneksi terputus.");
           });
         }).catchError((error) {
-          showSnackBar("Gagal tersambung. Pastikan modul ESP32 Anda menyala.");
+          showSnackBar("Gagal tersambung. Periksa modul ESP32 Anda.");
           setState(() { isConnecting = false; });
         });
       } else {
-        showSnackBar("Modul '$targetDeviceName' belum di-pairing di setelan Bluetooth HP!");
+        showSnackBar("Modul belum di-pairing di setelan Bluetooth HP!");
         setState(() { isConnecting = false; });
       }
     } catch (e) {
@@ -137,10 +139,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
           injDuration = double.parse(dataPoints[5]);
 
           dataCounter++;
+          
+          // Rekam riwayat data masuk ke masing-masing List array
           rpmHistory.add(FlSpot(dataCounter.toDouble(), rpm));
+          tpsHistory.add(FlSpot(dataCounter.toDouble(), tps));
 
+          // Potong data terlama jika melampaui batas resolusi layar
           if (rpmHistory.length > maxDataPoints) {
             rpmHistory.removeAt(0);
+          }
+          if (tpsHistory.length > maxDataPoints) {
+            tpsHistory.removeAt(0);
           }
         });
       }
@@ -170,6 +179,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Menentukan dataset aktif dan konfigurasi batas skala berdasarkan pilihan tombol
+    List<FlSpot> activeHistory = selectedGraph == "RPM" ? rpmHistory : tpsHistory;
+    double maxScaleY = selectedGraph == "RPM" ? 12000 : 100; 
+    Color graphColor = selectedGraph == "RPM" ? Colors.greenAccent : Colors.amberAccent;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -192,6 +206,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         padding: const EdgeInsets.all(10.0),
         child: Column(
           children: [
+            // PANEL ATAS: RPM BAR DIGITAL
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
@@ -220,6 +235,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
             const SizedBox(height: 10),
+
+            // GRIDS SENSOR ADAPTIF
             Expanded(
               flex: 4, 
               child: GridView.count(
@@ -236,48 +253,73 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
             const SizedBox(height: 10),
+
+            // PANEL GRAFIK SELEKTIF (RPM / TPS)
             Expanded(
-              flex: 3, 
+              flex: 4, 
               child: Container(
-                padding: const EdgeInsets.fromLTRB(10, 12, 16, 10),
+                padding: const EdgeInsets.fromLTRB(10, 8, 16, 10),
                 decoration: BoxDecoration(
                   color: Colors.black,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: const Color(0xFF2C2C2C)),
                 ),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('RPM REAL-TIME GRAPH (MAX 12k)', style: TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 10),
+                    // BARIS PEMILIH GRAFIK (SELECTION TAB)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('LIVE DATA GRAPH', style: TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold)),
+                        Row(
+                          children: [
+                            _buildSelectionButton("RPM", Colors.greenAccent),
+                            const SizedBox(width: 8),
+                            _buildSelectionButton("TPS", Colors.amberAccent),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    
+                    // AREA VISUALISASI GRAFIK
                     Expanded(
-                      child: rpmHistory.isEmpty
-                          ? const Center(child: Text("Menunggu data masuk...", style: TextStyle(color: Colors.grey, fontSize: 12)))
-                          : LineChart(
-                              LineChartData(
-                                minX: rpmHistory.first.x,
-                                maxX: rpmHistory.last.x,
-                                minY: 0,
-                                maxY: 12000, 
-                                clipData: const FlClipData.all(), 
-                                gridData: const FlGridData(show: true, drawVerticalLine: false),
-                                titlesData: const FlTitlesData(
-                                  show: true,
-                                  rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                                  topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                                  bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                                ),
-                                borderData: FlBorderData(show: false),
-                                lineBarsData: [
-                                  LineChartBarData(
-                                    spots: rpmHistory,
+                      child: activeHistory.isEmpty
+? const Center(child: Text("Menunggu data masuk...", style: TextStyle(color: Colors.grey, fontSize: 12)))
+: LineChart(
+LineChartData(
+minX: activeHistory.first.x,
+maxX: activeHistory.last.x,
+minY: 0,maxY: maxScaleY,
+clipData: const FlClipData.all(),
+gridData: const FlGridData(
+show: true, drawVerticalLine: false),
+titlesData: const FlTitlesData(
+show: true,
+rightTitles: AxisTitles(
+sideTitles: SideTitles(
+showTitles: false)),
+topTitles: AxisTitles(
+sideTitles: SideTitles(
+showTitles: false)),
+bottomTitles: AxisTitles(
+sideTitles: SideTitles(
+showTitles: false)),
+),
+borderData: FlBorderData(
+show: false),
+lineBarsData: [
+LineChartBarData(
+spots: activeHistory,
 isCurved: true,
-color: Colors.greenAccent,barWidth: 3,
+color: graphColor,
+barWidth: 3,
 isStrokeCapRound: true,
-dotData: const FlDotData(show: false),
+dotData: const FlDotData
+(show: false),
 belowBarData: BarAreaData(
 show: true,
-color: Colors.greenAccent.withOpacity(0.1),
+color: graphColor.withOpacity(0.1),
 ),
 ),
 ],
@@ -289,24 +331,30 @@ color: Colors.greenAccent.withOpacity(0.1),
 ),
 ),
 const SizedBox(height: 10),
+// PANEL BAWAH VOLTASE
 Container(
 width: double.infinity,
 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
 decoration: BoxDecoration(color: const Color(0xFF1E1E1E),
-borderRadius: BorderRadius.circular(10),),
+borderRadius: BorderRadius.circular(10),
+),
 child: Row(
 mainAxisAlignment: MainAxisAlignment.spaceBetween,
 children: [
 Row(
 children: [
-const Icon(Icons.battery_charging_full, color: Colors.yellowAccent, size: 18),
+const Icon(
+Icons.battery_charging_full, color: Colors.yellowAccent, size: 18),
 const SizedBox(width: 8),
 const Text('BATTERY:', style: TextStyle(color: Colors.grey, fontSize: 11)),
 const SizedBox(width: 5),
-Text('${battery.toStringAsFixed(1)} V', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13)),
+Text('${battery.toStringAsFixed(1)} V', style: const TextStyle(
+fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13)),
 ],
 ),
-Text(isConnected ? 'LIVE MODE' : 'OFFLINE MODE', style: TextStyle(color: isConnected ? Colors.greenAccent : Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
+Text(
+isConnected ? 'LIVE MODE' : 'OFFLINE MODE', style: TextStyle(
+color: isConnected ? Colors.greenAccent : Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
 ],
 ),
 ),
@@ -315,11 +363,36 @@ Text(isConnected ? 'LIVE MODE' : 'OFFLINE MODE', style: TextStyle(color: isConne
 ),
 );
 }
+// Komponen Tombol Pemilih Grafik Khusus
+Widget _buildSelectionButton(String label, Color activeColor) {
+bool isSelected = selectedGraph == label;
+return GestureDetector(onTap: () {setState(() {
+selectedGraph = label;
+}
+);
+},
+child: Container(
+padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+decoration: BoxDecoration(color: isSelected ? activeColor.withOpacity(0.2) : Colors.transparent,
+borderRadius: BorderRadius.circular(6),
+border: Border.all(color: isSelected ? activeColor : const Color(0xFF444444)),
+),
+child: Text(
+label,style: TextStyle(
+color: isSelected ? activeColor : Colors.grey,fontSize: 11,
+fontWeight: FontWeight.bold,),
+),
+),
+);
+}
 Widget _buildSensorCard(String title, String value, String unit, IconData icon, Color color) {
-return Container(padding: const EdgeInsets.all(8),
-decoration: BoxDecoration(color: Colors.black,
+return Container(
+padding: const EdgeInsets.all(8),
+decoration: BoxDecoration(
+color: Colors.black,
 borderRadius: BorderRadius.circular(10),
-border: Border.all(color: const Color(0xFF2C2C2C)),
+border: Border.all(
+color: const Color(0xFF2C2C2C)),
 ),
 child: Column(
 crossAxisAlignment: CrossAxisAlignment.start,
@@ -327,7 +400,8 @@ mainAxisAlignment: MainAxisAlignment.spaceBetween,
 children: [
 Row(
 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-children: [Text(title, style: const TextStyle(color: Colors.grey, fontSize: 9, fontWeight: FontWeight.bold)),
+children: [
+Text(title, style: const TextStyle(color: Colors.grey, fontSize: 9, fontWeight: FontWeight.bold)),
 Icon(icon, color: color, size: 15),
 ],
 ),
