@@ -52,14 +52,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   final String targetDeviceName = "ESP32_ECU_SCANNER"; 
 
+  // Fungsi memeriksa apakah Bluetooth di HP aktif dan meminta izin jika mati
   void connectToESP32() async {
     if (isConnected) {
       disconnect();
       return;
     }
+
     setState(() { isConnecting = true; });
 
+    // Memastikan Bluetooth di HP dalam posisi ON
+    bool? isBluetoothEnabled = await FlutterBluetoothSerial.instance.isEnabled;
+    if (isBluetoothEnabled == false) {
+      await FlutterBluetoothSerial.instance.requestEnable();
+      showSnackBar("Mengaktifkan Bluetooth HP...");
+      setState(() { isConnecting = false; });
+      return;
+    }
+
     try {
+      // Mengambil daftar perangkat yang sudah ter-pairing di HP
       List<BluetoothDevice> devices = await FlutterBluetoothSerial.instance.getBondedDevices();
       BluetoothDevice? esp32device;
 
@@ -79,20 +91,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
             rpmHistory.clear(); 
             dataCounter = 0;
           });
+          showSnackBar("Terhubung ke Scanner ECU!");
 
           connection!.input!.listen(_onDataReceived).onDone(() {
             setState(() { isConnected = false; });
+            showSnackBar("Koneksi terputus dari perangkat.");
           });
         }).catchError((error) {
-          showSnackBar("Gagal tersambung.");
+          showSnackBar("Gagal tersambung. Pastikan modul ESP32 Anda menyala.");
           setState(() { isConnecting = false; });
         });
       } else {
-        showSnackBar("ESP32 tidak ditemukan. Pastikan sudah pairing!");
+        showSnackBar("Modul '$targetDeviceName' belum di-pairing di setelan Bluetooth HP!");
         setState(() { isConnecting = false; });
       }
     } catch (e) {
-      showSnackBar("Error Bluetooth: $e");
+      showSnackBar("Akses Bluetooth Ditolak Sistem Android.");
       setState(() { isConnecting = false; });
     }
   }
@@ -142,7 +156,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void showSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(message),
+      duration: const Duration(seconds: 3),
+    ));
   }
 
   @override
@@ -175,7 +192,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         padding: const EdgeInsets.all(10.0),
         child: Column(
           children: [
-            // PANEL ATAS: RPM BAR DIGITAL
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
@@ -204,10 +220,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
             const SizedBox(height: 10),
-
-            // GRIDS: SEKARANG MENGGUNAKAN EXPANDED AGAR ADAPTIF & TIDAK MENUTUPI ECT/INJECTOR
             Expanded(
-              flex: 4, // Alokasi ruang seimbang untuk grid sensor
+              flex: 4, 
               child: GridView.count(
                 crossAxisCount: 2,
                 crossAxisSpacing: 10,
@@ -222,10 +236,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
             const SizedBox(height: 10),
-
-            // PANEL GRAFIK: DIBERI BATAS AGAR TIDAK BOCOR KELUAR KOTAK (CLIP DATA)
             Expanded(
-              flex: 3, // Porsi ukuran grafik yang pas di bawah sensor
+              flex: 3, 
               child: Container(
                 padding: const EdgeInsets.fromLTRB(10, 12, 16, 10),
                 decoration: BoxDecoration(
@@ -246,8 +258,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 minX: rpmHistory.first.x,
                                 maxX: rpmHistory.last.x,
                                 minY: 0,
-                                maxY: 12000, // Menaikkan batas atas agar grafik lebih lega
-                                clipData: const FlClipData.all(), // POTONG GARIS JIKA MELEBIHI KOTAK
+                                maxY: 12000, 
+                                clipData: const FlClipData.all(), 
                                 gridData: const FlGridData(show: true, drawVerticalLine: false),
                                 titlesData: const FlTitlesData(
                                   show: true,
@@ -259,13 +271,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 lineBarsData: [
                                   LineChartBarData(
                                     spots: rpmHistory,
-                                    isCurved: true,
-                                    color: Colors.greenAccent,
-                                    barWidth: 3,
-                                    isStrokeCapRound: true,
-                                    dotData: const FlDotData(show: false),
-                                    belowBarData: BarAreaData(
-				show: true,
+isCurved: true,
+color: Colors.greenAccent,barWidth: 3,
+isStrokeCapRound: true,
+dotData: const FlDotData(show: false),
+belowBarData: BarAreaData(
+show: true,
 color: Colors.greenAccent.withOpacity(0.1),
 ),
 ),
@@ -278,12 +289,10 @@ color: Colors.greenAccent.withOpacity(0.1),
 ),
 ),
 const SizedBox(height: 10),
-// PANEL BAWAH: BATTERY
 Container(
 width: double.infinity,
 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-decoration: BoxDecoration(
-color: const Color(0xFF1E1E1E),
+decoration: BoxDecoration(color: const Color(0xFF1E1E1E),
 borderRadius: BorderRadius.circular(10),),
 child: Row(
 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -297,8 +306,7 @@ const SizedBox(width: 5),
 Text('${battery.toStringAsFixed(1)} V', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13)),
 ],
 ),
-Text(isConnected ? 'LIVE MODE' : 'OFFLINE MODE', style: TextStyle(color: isConnected ? 
-Colors.greenAccent : Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
+Text(isConnected ? 'LIVE MODE' : 'OFFLINE MODE', style: TextStyle(color: isConnected ? Colors.greenAccent : Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
 ],
 ),
 ),
@@ -308,10 +316,8 @@ Colors.greenAccent : Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
 );
 }
 Widget _buildSensorCard(String title, String value, String unit, IconData icon, Color color) {
-return Container(
-padding: const EdgeInsets.all(8),
-decoration: BoxDecoration(
-color: Colors.black,
+return Container(padding: const EdgeInsets.all(8),
+decoration: BoxDecoration(color: Colors.black,
 borderRadius: BorderRadius.circular(10),
 border: Border.all(color: const Color(0xFF2C2C2C)),
 ),
@@ -321,8 +327,7 @@ mainAxisAlignment: MainAxisAlignment.spaceBetween,
 children: [
 Row(
 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-children: [
-Text(title, style: const TextStyle(color: Colors.grey, fontSize: 9, fontWeight: FontWeight.bold)),
+children: [Text(title, style: const TextStyle(color: Colors.grey, fontSize: 9, fontWeight: FontWeight.bold)),
 Icon(icon, color: color, size: 15),
 ],
 ),
