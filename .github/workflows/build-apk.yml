@@ -42,8 +42,9 @@ jobs:
       - name: Install Dependencies
         run: |
           cd clean_project
-          # Menambahkan library Bluetooth dan Grafik fl_chart
-          flutter pub add flutter_bluetooth_serial fl_chart
+          # Menambahkan library Bluetooth dan mengunci versi fl_chart yang cocok dengan Flutter 3.22
+          flutter pub add flutter_bluetooth_serial
+          flutter pub add fl_chart:0.68.0
           flutter pub get
 
       - name: Build APK (Release Mode)
