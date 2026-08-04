@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
-import 'dart:math';
+import 'dart:convert';
+import 'dart:typed_data';
+import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 
 void main() {
   runApp(const EcuDashboardApp());
@@ -31,52 +33,123 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  // Variabel Sensor ECU asli
   double rpm = 0.0;
   double ect = 0.0; 
   double tps = 0.0; 
   double battery = 0.0;
   double speed = 0.0;
   double injDuration = 0.0; 
-  
-  Timer? _simulationTimer;
-  bool isConnected = true;
-  double _time = 0.0;
 
-  @override
-  void initState() {
-    super.initState();
-    _startSimulation();
+  // Variabel Koneksi Bluetooth
+  BluetoothConnection? connection;
+  bool isConnected = false;
+  bool isConnecting = false;
+  String bufferData = "";
+
+  // Ganti dengan nama Bluetooth ESP32 Anda agar otomatis tersambung saat dicari
+  final String targetDeviceName = "ESP32_ECU_SCANNER"; 
+
+  void connectToESP32() async {
+    if (isConnected) {
+      disconnect();
+      return;
+    }
+
+    setState(() {
+      isConnecting = true;
+    });
+
+    try {
+      List<BluetoothDevice> devices = await FlutterBluetoothSerial.instance.getBondedDevices();
+      BluetoothDevice? esp32device;
+
+      for (var device in devices) {
+        if (device.name == targetDeviceName) {
+          esp32device = device;
+          break;
+        }
+      }
+
+      if (esp32device != null) {
+        BluetoothConnection.toAddress(esp32device.address).then((_connection) {
+          print('Terhubung ke modul ECU Scanner!');
+          connection = _connection;
+          setState(() {
+            isConnected = true;
+            isConnecting = false;
+          });
+
+          // Mendengarkan aliran data masuk dari ESP32
+          connection!.input!.listen(_onDataReceived).onDone(() {
+            setState(() {
+              isConnected = false;
+            });
+          });
+        }).catchError((error) {
+          showSnackBar("Gagal tersambung ke perangkat fisik.");
+          setState(() { isConnecting = false; });
+        });
+      } else {
+        showSnackBar("ESP32 tidak ditemukan. Pastikan sudah di-pairing di setelan HP!");
+        setState(() { isConnecting = false; });
+      }
+    } catch (e) {
+      showSnackBar("Error Bluetooth: $e");
+      setState(() { isConnecting = false; });
+    }
   }
 
-  void _startSimulation() {
-    _simulationTimer = Timer.periodic(const Duration(milliseconds: 200), (timer) {
-      if (!isConnected) return;
+  // Fungsi memproses data streaming masuk dari ESP32
+  void _onDataReceived(Uint8List data) {
+    String dataString = utf8.decode(data);
+    bufferData += dataString;
 
-      setState(() {
-        _time += 0.2;
-        double wave = (sin(_time * 0.5) + 1) / 2; 
-        
-        tps = wave * 85.0 + (Random().nextDouble() * 2); 
-        if (tps < 0) tps = 0;
-        
-        rpm = 1400 + (wave * 7000) + (Random().nextInt(150)); 
-        speed = wave * 95.0 + (Random().nextInt(3)); 
-        
-        if (ect < 88.0) {
-          ect += 0.1;
-        } else {
-          ect = 89.0 + sin(_time * 0.1) * 2;
-        }
+    // Memastikan baris data diterima utuh (diakhiri perpindahan baris \n)
+    if (bufferData.contains('\n')) {
+      List<String> lines = bufferData.split('\n');
+      // Ambil baris terakhir yang sudah lengkap terbaca
+      String completeLine = lines[lines.length - 2].trim();
+      bufferData = lines.last; // Simpan sisa data terpotong ke buffer
 
-        battery = 13.8 + (sin(_time) * 0.2); 
-        injDuration = 1.8 + (wave * 4.5); 
-      });
+      parseEcuCsvData(completeLine);
+    }
+  }
+
+  // Melakukan parsing string CSV dari ESP32: RPM,SPEED,TPS,ECT,BATTERY,INJ
+  void parseEcuCsvData(String csvLine) {
+    try {
+      List<String> dataPoints = csvLine.split(',');
+      if (dataPoints.length >= 6) {
+        setState(() {
+          rpm = double.parse(dataPoints[0]);
+          speed = double.parse(dataPoints[1]);
+          tps = double.parse(dataPoints[2]);
+          ect = double.parse(dataPoints[3]);
+          battery = double.parse(dataPoints[4]);
+          injDuration = double.parse(dataPoints[5]);
+        });
+      }
+    } catch (e) {
+      print("Kesalahan struktur pembacaan data serial: $e");
+    }
+  }
+
+  void disconnect() {
+    connection?.dispose();
+    setState(() {
+      isConnected = false;
     });
+    showSnackBar("Koneksi diputus.");
+  }
+
+  void showSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
   void dispose() {
-    _simulationTimer?.cancel();
+    connection?.dispose();
     super.dispose();
   }
 
@@ -85,19 +158,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'HONDA SUPRA X 125 FI', 
+          'HONDA SUPRA X 125 LIVE', 
           style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.5, color: Colors.white),
         ),
         backgroundColor: Colors.black,
         elevation: 5,
         centerTitle: true,
         actions: [
-          Icon(
-            Icons.circle,
-            color: isConnected ? Colors.greenAccent : Colors.redAccent,
-            size: 16,
+          IconButton(
+            icon: isConnecting 
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : Icon(Icons.bluetooth, color: isConnected ? Colors.greenAccent : Colors.redAccent),
+            onPressed: isConnecting ? null : connectToESP32,
           ),
-          const SizedBox(width: 15),
+          const SizedBox(width: 10),
         ],
       ),
       body: Padding(
@@ -110,23 +184,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
               decoration: BoxDecoration(
                 color: Colors.black,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.redAccent.withOpacity(0.5), width: 1.5),
+                border: Border.all(color: isConnected ? Colors.greenAccent.withOpacity(0.5) : Colors.redAccent.withOpacity(0.5), width: 1.5),
               ),
               child: Column(
                 children: [
-                  const Text('ENGINE RPM', style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
+                  Text(isConnected ? 'LIVE ENGINE RPM' : 'DISCONNECTED (TAP BT ICON)', style: const TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 5),
                   Text(
                     rpm.toStringAsFixed(0),
-                    style: const TextStyle(fontSize: 48, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: Colors.redAccent),
+                    style: TextStyle(fontSize: 48, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: isConnected ? Colors.greenAccent : Colors.redAccent),
                   ),
                   const SizedBox(height: 10),
                   ClipRRect(
                     borderRadius: BorderRadius.circular(5),
                     child: LinearProgressIndicator(
                       value: (rpm / 10000).clamp(0.0, 1.0),
-                      backgroundColor: Colors.grey,
-                      valueColor: AlwaysStoppedAnimation<Color>(rpm > 8000 ? Colors.red : Colors.orangeAccent),
+                      backgroundColor: Colors.grey[900],
+                      valueColor: AlwaysStoppedAnimation<Color>(rpm > 8000 ? Colors.red : Colors.greenAccent),
                       minHeight: 12,
                     ),
                   ),
@@ -170,9 +244,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ],
                   ),
-                  const Text(
-                    'PROTOKOL: K-LINE KWP2000',
-                    style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold),
+                  Text(
+                    isConnected ? 'STATUS: CONNECTED' : 'STATUS: OFFLINE',
+                    style: TextStyle(color: isConnected ? Colors.greenAccent : Colors.grey, fontSize: 10, fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
@@ -207,15 +281,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
             textBaseline: TextBaseline.alphabetic,
             children: [
               Text(
-                value,
-                style: const TextStyle(fontSize: 26, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: Colors.white),
-              ),
-              const SizedBox(width: 4),
-              Text(unit, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
+		value, style: const TextStyle(fontSize: 26, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: Colors.white),
+		),
+		const SizedBox(width: 4),
+		Text(unit, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+		],
+		),
+		],
+		),
+		);
+	}
+	}
