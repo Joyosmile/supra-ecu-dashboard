@@ -31,25 +31,29 @@ jobs:
 
       - name: Create Clean App Project
         run: |
-          # 1. Membuat proyek baru terisolasi murni dari awal
           flutter create -t app --org com.supra.ecu --project-name ecu_dashboard_supra clean_project
-          
-          # 2. Menyalin berkas main.dart dashboard ECU Anda ke dalam proyek bersih tersebut
           cp -f lib/main.dart clean_project/lib/main.dart
+
+      - name: Inject Bluetooth & Internet Permissions
+        run: |
+          # Menyisipkan izin izin hardware ke AndroidManifest.xml agar aplikasi bisa scan Bluetooth & Wi-Fi
+          PERMISSIONS='<uses-permission android:name="android.permission.BLUETOOTH"/>\n<uses-permission android:name="android.permission.BLUETOOTH_ADMIN"/>\n<uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>\n<uses-permission android:name="android.permission.BLUETOOTH_SCAN"/>\n<uses-permission android:name="android.permission.INTERNET"/>'
+          sed -i "s|<manifest[^>]*>|\0\n$PERMISSIONS|g" clean_project/android/app/src/main/AndroidManifest.xml
 
       - name: Install Dependencies
         run: |
           cd clean_project
+          # Menambahkan library Bluetooth terpercaya untuk Flutter 3.22
+          flutter pub add flutter_bluetooth_serial
           flutter pub get
 
       - name: Build APK (Release Mode)
         run: |
           cd clean_project
-          # Menambahkan perintah bypass pohon ikon untuk mencegah kegagalan task kompilasi Gradle
           flutter build apk --release --no-tree-shake-icons
 
       - name: Upload APK to Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Dashboard-ECU-SupraX125
+          name: Dashboard-ECU-SupraX125-RealTime
           path: clean_project/build/app/outputs/flutter-apk/app-release.apk
