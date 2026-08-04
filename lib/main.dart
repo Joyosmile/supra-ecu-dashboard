@@ -3,7 +3,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
-import 'package:fl_chart/fl_chart.dart'; // Import library grafik
+import 'package:fl_chart/fl_chart.dart';
 
 void main() {
   runApp(const EcuDashboardApp());
@@ -41,7 +41,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   double speed = 0.0;
   double injDuration = 0.0; 
 
-  // Variabel Histori Data untuk Grafik (Menyimpan 30 data terakhir)
   List<FlSpot> rpmHistory = [];
   int dataCounter = 0;
   final int maxDataPoints = 30;
@@ -51,7 +50,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool isConnecting = false;
   String bufferData = "";
 
-  final String targetDeviceName = "JAYA_TECH"; 
+  final String targetDeviceName = "ESP32_ECU_SCANNER"; 
 
   void connectToESP32() async {
     if (isConnected) {
@@ -77,7 +76,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           setState(() {
             isConnected = true;
             isConnecting = false;
-            rpmHistory.clear(); // Reset grafik saat koneksi baru dimulai
+            rpmHistory.clear(); 
             dataCounter = 0;
           });
 
@@ -85,7 +84,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             setState(() { isConnected = false; });
           });
         }).catchError((error) {
-          showSnackBar("Gagal tersambung ke perangkat.");
+          showSnackBar("Gagal tersambung.");
           setState(() { isConnecting = false; });
         });
       } else {
@@ -123,11 +122,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           battery = double.parse(dataPoints[4]);
           injDuration = double.parse(dataPoints[5]);
 
-          // Tambahkan data RPM ke riwayat grafik
           dataCounter++;
           rpmHistory.add(FlSpot(dataCounter.toDouble(), rpm));
 
-          // Jika data melebihi batas (30 titik), hapus data paling lama agar grafik berjalan
           if (rpmHistory.length > maxDataPoints) {
             rpmHistory.removeAt(0);
           }
@@ -178,7 +175,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         padding: const EdgeInsets.all(10.0),
         child: Column(
           children: [
-            // PANEL ATAS: ANGKA RPM DIGITAL
+            // PANEL ATAS: RPM BAR DIGITAL
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
@@ -197,9 +194,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ClipRRect(
                     borderRadius: BorderRadius.circular(5),
                     child: LinearProgressIndicator(
-                      value: (rpm / 10000).clamp(0.0, 1.0),
-                      backgroundColor: Colors.grey[900],
-                      valueColor: AlwaysStoppedAnimation<Color>(rpm > 8000 ? Colors.red : Colors.greenAccent),
+                      value: (rpm / 12000).clamp(0.0, 1.0),
+                      backgroundColor: Colors.grey,
+                      valueColor: AlwaysStoppedAnimation<Color>(rpm > 9500 ? Colors.red : Colors.greenAccent),
                       minHeight: 8,
                     ),
                   ),
@@ -208,15 +205,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 10),
 
-            // GRIDS: SPEED, TPS, ECT, INJECTOR
-            SizedBox(
-              height: 160,
+            // GRIDS: SEKARANG MENGGUNAKAN EXPANDED AGAR ADAPTIF & TIDAK MENUTUPI ECT/INJECTOR
+            Expanded(
+              flex: 4, // Alokasi ruang seimbang untuk grid sensor
               child: GridView.count(
                 crossAxisCount: 2,
                 crossAxisSpacing: 10,
                 mainAxisSpacing: 10,
                 childAspectRatio: 1.8,
-                physics: const NeverScrollableScrollPhysics(),
                 children: [
                   _buildSensorCard('VEHICLE SPEED', speed.toStringAsFixed(0), 'Km/h', Icons.speed, Colors.blueAccent),
                   _buildSensorCard('THROTTLE (TPS)', '${tps.toStringAsFixed(1)}%', 'Pos', Icons.adjust, Colors.greenAccent),
@@ -227,20 +223,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 10),
 
-            // PANEL GRAFIK REALTIME DATA HISTORI RPM
+            // PANEL GRAFIK: DIBERI BATAS AGAR TIDAK BOCOR KELUAR KOTAK (CLIP DATA)
             Expanded(
+              flex: 3, // Porsi ukuran grafik yang pas di bawah sensor
               child: Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.fromLTRB(10, 12, 16, 10),
                 decoration: BoxDecoration(
                   color: Colors.black,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey[800]!),
+                  border: Border.all(color: const Color(0xFF2C2C2C)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('RPM REAL-TIME GRAPH', style: TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 15),
+                    const Text('RPM REAL-TIME GRAPH (MAX 12k)', style: TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 10),
                     Expanded(
                       child: rpmHistory.isEmpty
                           ? const Center(child: Text("Menunggu data masuk...", style: TextStyle(color: Colors.grey, fontSize: 12)))
@@ -249,7 +246,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 minX: rpmHistory.first.x,
                                 maxX: rpmHistory.last.x,
                                 minY: 0,
-                                maxY: 10000, // Skala RPM maksimal motor Supra
+                                maxY: 12000, // Menaikkan batas atas agar grafik lebih lega
+                                clipData: const FlClipData.all(), // POTONG GARIS JIKA MELEBIHI KOTAK
                                 gridData: const FlGridData(show: true, drawVerticalLine: false),
                                 titlesData: const FlTitlesData(
                                   show: true,
@@ -266,81 +264,5 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     barWidth: 3,
                                     isStrokeCapRound: true,
                                     dotData: const FlDotData(show: false),
-				    belowBarData: BarAreaData(
-				    show: true,
-				    color: Colors.greenAccent.withOpacity(0.1),
-				),
-				),
-				],
-				),
-				),
-				),
-				],
-				),
-				),
-				),
-				const SizedBox(height: 10),
-	// PANEL BAWAH: BATTERY
-	Container(
-	width: double.infinity,
-	padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-	decoration: BoxDecoration(
-	color: const Color(0xFF1E1E1E),
-	borderRadius: BorderRadius.circular(10),
-	),
-	child: Row(
-	mainAxisAlignment: MainAxisAlignment.spaceBetween,
-	children: [
-	Row(
-	children: [
-	const Icon(Icons.battery_charging_full, color: Colors.yellowAccent, size: 18),
-	const SizedBox(width: 8),
-	const Text('BATTERY:', style: TextStyle(color: Colors.grey, fontSize: 11)),
-	const SizedBox(width: 5),
-	Text('${battery.toStringAsFixed(1)} V', style: const TextStyle(fontWeight: FontWeight.bold,
-	color: Colors.white, fontSize: 13)),
-	],
-	),
-	Text(isConnected ? 'LIVE MODE' : 'OFFLINE MODE', style: TextStyle(color: isConnected ?
-	Colors.greenAccent : Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
-	],
-	),
-	),
-	],
-	),
-	),
-	);
-	}
-	Widget _buildSensorCard(String title, String value, String unit, IconData icon, Color color) {
-	return Container(
-	padding: const EdgeInsets.all(8),
-	decoration: BoxDecoration(
-	color: Colors.black,borderRadius: 
-	BorderRadius.circular(10),
-	border: Border.all(color: const Color(0xFF2C2C2C)),
-	),
-	child: Column(
-	crossAxisAlignment: CrossAxisAlignment.start,
-	mainAxisAlignment: MainAxisAlignment.spaceBetween,
-	children: [
-	Row(
-	mainAxisAlignment: MainAxisAlignment.spaceBetween,
-	children: [
-	Text(title, style: const TextStyle(color: Colors.grey, fontSize: 9, fontWeight: 
-	FontWeight.bold)),
-	Icon(icon, color: color, size: 15),
-	],
-	),
-	Row(
-	crossAxisAlignment: CrossAxisAlignment.baseline,
-	textBaseline: TextBaseline.alphabetic,
-	children: [Text(value, style: const TextStyle(fontSize: 22, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: Colors.white)),
-	const SizedBox(width: 2),
-	Text(unit, style: const TextStyle(fontSize: 10, color: Colors.grey)),
-	],
-	),
-	],
-	),
-	);
-	}
-	}
+                                    belowBarData: BarAreaData(
+				show: true,color: Colors.greenAccent.withOpacity(0.1),),),],),),),],),),),const SizedBox(height: 10),// PANEL BAWAH: BATTERYContainer(width: double.infinity,padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),decoration: BoxDecoration(color: const Color(0xFF1E1E1E),borderRadius: BorderRadius.circular(10),),child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween,children: [Row(children: [const Icon(Icons.battery_charging_full, color: Colors.yellowAccent, size: 18),const SizedBox(width: 8),const Text('BATTERY:', style: TextStyle(color: Colors.grey, fontSize: 11)),const SizedBox(width: 5),Text('${battery.toStringAsFixed(1)} V', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13)),],),Text(isConnected ? 'LIVE MODE' : 'OFFLINE MODE', style: TextStyle(color: isConnected ? Colors.greenAccent : Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),],),),],),),);}Widget _buildSensorCard(String title, String value, String unit, IconData icon, Color color) {return Container(padding: const EdgeInsets.all(8),decoration: BoxDecoration(color: Colors.black,borderRadius: BorderRadius.circular(10),border: Border.all(color: const Color(0xFF2C2C2C)),),child: Column(crossAxisAlignment: CrossAxisAlignment.start,mainAxisAlignment: MainAxisAlignment.spaceBetween,children: [Row(mainAxisAlignment: MainAxisAlignment.spaceBetween,children: [Text(title, style: const TextStyle(color: Colors.grey, fontSize: 9, fontWeight: FontWeight.bold)),Icon(icon, color: color, size: 15),],),Row(crossAxisAlignment: CrossAxisAlignment.baseline,textBaseline: TextBaseline.alphabetic,children: [Text(value, style: const TextStyle(fontSize: 22, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: Colors.white)),const SizedBox(width: 2),Text(unit, style: const TextStyle(fontSize: 10, color: Colors.grey)),],),],),);}}
