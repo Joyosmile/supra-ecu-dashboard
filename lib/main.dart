@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
+import 'package:fl_chart/fl_chart.dart'; // Import library grafik
 
 void main() {
   runApp(const EcuDashboardApp());
@@ -33,7 +34,6 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  // Variabel Sensor ECU asli
   double rpm = 0.0;
   double ect = 0.0; 
   double tps = 0.0; 
@@ -41,13 +41,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
   double speed = 0.0;
   double injDuration = 0.0; 
 
-  // Variabel Koneksi Bluetooth
+  // Variabel Histori Data untuk Grafik (Menyimpan 30 data terakhir)
+  List<FlSpot> rpmHistory = [];
+  int dataCounter = 0;
+  final int maxDataPoints = 30;
+
   BluetoothConnection? connection;
   bool isConnected = false;
   bool isConnecting = false;
   String bufferData = "";
 
-  // Ganti dengan nama Bluetooth ESP32 Anda agar otomatis tersambung saat dicari
   final String targetDeviceName = "JAYA_TECH"; 
 
   void connectToESP32() async {
@@ -55,10 +58,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       disconnect();
       return;
     }
-
-    setState(() {
-      isConnecting = true;
-    });
+    setState(() { isConnecting = true; });
 
     try {
       List<BluetoothDevice> devices = await FlutterBluetoothSerial.instance.getBondedDevices();
@@ -73,25 +73,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       if (esp32device != null) {
         BluetoothConnection.toAddress(esp32device.address).then((_connection) {
-          print('Terhubung ke modul ECU Scanner!');
           connection = _connection;
           setState(() {
             isConnected = true;
             isConnecting = false;
+            rpmHistory.clear(); // Reset grafik saat koneksi baru dimulai
+            dataCounter = 0;
           });
 
-          // Mendengarkan aliran data masuk dari ESP32
           connection!.input!.listen(_onDataReceived).onDone(() {
-            setState(() {
-              isConnected = false;
-            });
+            setState(() { isConnected = false; });
           });
         }).catchError((error) {
-          showSnackBar("Gagal tersambung ke perangkat fisik.");
+          showSnackBar("Gagal tersambung ke perangkat.");
           setState(() { isConnecting = false; });
         });
       } else {
-        showSnackBar("ESP32 tidak ditemukan. Pastikan sudah di-pairing di setelan HP!");
+        showSnackBar("ESP32 tidak ditemukan. Pastikan sudah pairing!");
         setState(() { isConnecting = false; });
       }
     } catch (e) {
@@ -100,23 +98,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  // Fungsi memproses data streaming masuk dari ESP32
   void _onDataReceived(Uint8List data) {
     String dataString = utf8.decode(data);
     bufferData += dataString;
 
-    // Memastikan baris data diterima utuh (diakhiri perpindahan baris \n)
     if (bufferData.contains('\n')) {
       List<String> lines = bufferData.split('\n');
-      // Ambil baris terakhir yang sudah lengkap terbaca
       String completeLine = lines[lines.length - 2].trim();
-      bufferData = lines.last; // Simpan sisa data terpotong ke buffer
+      bufferData = lines.last;
 
       parseEcuCsvData(completeLine);
     }
   }
 
-  // Melakukan parsing string CSV dari ESP32: RPM,SPEED,TPS,ECT,BATTERY,INJ
   void parseEcuCsvData(String csvLine) {
     try {
       List<String> dataPoints = csvLine.split(',');
@@ -128,18 +122,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ect = double.parse(dataPoints[3]);
           battery = double.parse(dataPoints[4]);
           injDuration = double.parse(dataPoints[5]);
+
+          // Tambahkan data RPM ke riwayat grafik
+          dataCounter++;
+          rpmHistory.add(FlSpot(dataCounter.toDouble(), rpm));
+
+          // Jika data melebihi batas (30 titik), hapus data paling lama agar grafik berjalan
+          if (rpmHistory.length > maxDataPoints) {
+            rpmHistory.removeAt(0);
+          }
         });
       }
     } catch (e) {
-      print("Kesalahan struktur pembacaan data serial: $e");
+      print("Error parsing: $e");
     }
   }
 
   void disconnect() {
     connection?.dispose();
-    setState(() {
-      isConnected = false;
-    });
+    setState(() { isConnected = false; });
     showSnackBar("Koneksi diputus.");
   }
 
@@ -162,7 +163,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.5, color: Colors.white),
         ),
         backgroundColor: Colors.black,
-        elevation: 5,
         centerTitle: true,
         actions: [
           IconButton(
@@ -175,12 +175,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
       body: Padding(
-        padding: const EdgeInsets.all(12.0),
+        padding: const EdgeInsets.all(10.0),
         child: Column(
           children: [
+            // PANEL ATAS: ANGKA RPM DIGITAL
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: Colors.black,
                 borderRadius: BorderRadius.circular(12),
@@ -188,32 +189,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               child: Column(
                 children: [
-                  Text(isConnected ? 'LIVE ENGINE RPM' : 'DISCONNECTED (TAP BT ICON)', style: const TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 5),
+                  Text(isConnected ? 'LIVE ENGINE RPM' : 'DISCONNECTED', style: const TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold)),
                   Text(
                     rpm.toStringAsFixed(0),
-                    style: TextStyle(fontSize: 48, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: isConnected ? Colors.greenAccent : Colors.redAccent),
+                    style: TextStyle(fontSize: 40, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: isConnected ? Colors.greenAccent : Colors.redAccent),
                   ),
-                  const SizedBox(height: 10),
                   ClipRRect(
                     borderRadius: BorderRadius.circular(5),
                     child: LinearProgressIndicator(
                       value: (rpm / 10000).clamp(0.0, 1.0),
                       backgroundColor: Colors.grey[900],
                       valueColor: AlwaysStoppedAnimation<Color>(rpm > 8000 ? Colors.red : Colors.greenAccent),
-                      minHeight: 12,
+                      minHeight: 8,
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 12),
-            Expanded(
+            const SizedBox(height: 10),
+
+            // GRIDS: SPEED, TPS, ECT, INJECTOR
+            SizedBox(
+              height: 160,
               child: GridView.count(
                 crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 1.3,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+                childAspectRatio: 1.8,
+                physics: const NeverScrollableScrollPhysics(),
                 children: [
                   _buildSensorCard('VEHICLE SPEED', speed.toStringAsFixed(0), 'Km/h', Icons.speed, Colors.blueAccent),
                   _buildSensorCard('THROTTLE (TPS)', '${tps.toStringAsFixed(1)}%', 'Pos', Icons.adjust, Colors.greenAccent),
@@ -222,73 +225,122 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ],
               ),
             ),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E1E1E),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.battery_charging_full, color: Colors.yellowAccent, size: 20),
-                      const SizedBox(width: 8),
-                      const Text('BATTERY:', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                      const SizedBox(width: 5),
-                      Text(
-                        '${battery.toStringAsFixed(1)} V',
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14),
-                      ),
-                    ],
-                  ),
-                  Text(
-                    isConnected ? 'STATUS: CONNECTED' : 'STATUS: OFFLINE',
-                    style: TextStyle(color: isConnected ? Colors.greenAccent : Colors.grey, fontSize: 10, fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+            const SizedBox(height: 10),
 
-  Widget _buildSensorCard(String title, String value, String unit, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.black,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFF2C2C2C)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(title, style: const TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
-              Icon(icon, color: color, size: 18),
-            ],
-          ),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-		value, style: const TextStyle(fontSize: 26, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: Colors.white),
-		),
-		const SizedBox(width: 4),
-		Text(unit, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-		],
-		),
-		],
-		),
-		);
+            // PANEL GRAFIK REALTIME DATA HISTORI RPM
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey[800]!),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('RPM REAL-TIME GRAPH', style: TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 15),
+                    Expanded(
+                      child: rpmHistory.isEmpty
+                          ? const Center(child: Text("Menunggu data masuk...", style: TextStyle(color: Colors.grey, fontSize: 12)))
+                          : LineChart(
+                              LineChartData(
+                                minX: rpmHistory.first.x,
+                                maxX: rpmHistory.last.x,
+                                minY: 0,
+                                maxY: 10000, // Skala RPM maksimal motor Supra
+                                gridData: const FlGridData(show: true, drawVerticalLine: false),
+                                titlesData: const FlTitlesData(
+                                  show: true,
+                                  rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                                  topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                                  bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                                ),
+                                borderData: FlBorderData(show: false),
+                                lineBarsData: [
+                                  LineChartBarData(
+                                    spots: rpmHistory,
+                                    isCurved: true,
+                                    color: Colors.greenAccent,
+                                    barWidth: 3,
+                                    isStrokeCapRound: true,
+                                    dotData: const FlDotData(show: false),
+				    belowBarData: BarAreaData(
+				    show: true,
+				    color: Colors.greenAccent.withOpacity(0.1),
+				),
+				),
+				],
+				),
+				),
+				),
+				],
+				),
+				),
+				),
+				const SizedBox(height: 10),
+	// PANEL BAWAH: BATTERY
+	Container(
+	width: double.infinity,
+	padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+	decoration: BoxDecoration(
+	color: const Color(0xFF1E1E1E),
+	borderRadius: BorderRadius.circular(10),
+	),
+	child: Row(
+	mainAxisAlignment: MainAxisAlignment.spaceBetween,
+	children: [
+	Row(
+	children: [
+	const Icon(Icons.battery_charging_full, color: Colors.yellowAccent, size: 18),
+	const SizedBox(width: 8),
+	const Text('BATTERY:', style: TextStyle(color: Colors.grey, fontSize: 11)),
+	const SizedBox(width: 5),
+	Text('${battery.toStringAsFixed(1)} V', style: const TextStyle(fontWeight: FontWeight.bold,
+	color: Colors.white, fontSize: 13)),
+	],
+	),
+	Text(isConnected ? 'LIVE MODE' : 'OFFLINE MODE', style: TextStyle(color: isConnected ?
+	Colors.greenAccent : Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
+	],
+	),
+	),
+	],
+	),
+	),
+	);
+	}
+	Widget _buildSensorCard(String title, String value, String unit, IconData icon, Color color) {
+	return Container(
+	padding: const EdgeInsets.all(8),
+	decoration: BoxDecoration(
+	color: Colors.black,borderRadius: 
+	BorderRadius.circular(10),
+	border: Border.all(color: const Color(0xFF2C2C2C)),
+	),
+	child: Column(
+	crossAxisAlignment: CrossAxisAlignment.start,
+	mainAxisAlignment: MainAxisAlignment.spaceBetween,
+	children: [
+	Row(
+	mainAxisAlignment: MainAxisAlignment.spaceBetween,
+	children: [
+	Text(title, style: const TextStyle(color: Colors.grey, fontSize: 9, fontWeight: 
+	FontWeight.bold)),
+	Icon(icon, color: color, size: 15),
+	],
+	),
+	Row(
+	crossAxisAlignment: CrossAxisAlignment.baseline,
+	textBaseline: TextBaseline.alphabetic,
+	children: [Text(value, style: const TextStyle(fontSize: 22, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: Colors.white)),
+	const SizedBox(width: 2),
+	Text(unit, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+	],
+	),
+	],
+	),
+	);
 	}
 	}
