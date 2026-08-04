@@ -48,7 +48,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String bufferData = "";
 
   // Ganti dengan nama Bluetooth ESP32 Anda agar otomatis tersambung saat dicari
-  final String targetDeviceName = "ESP32_ECU_SCANNER"; 
+  final String targetDeviceName = "JAYA_TECH"; 
 
   void connectToESP32() async {
     if (isConnected) {
