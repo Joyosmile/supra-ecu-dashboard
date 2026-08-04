@@ -265,4 +265,78 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     isStrokeCapRound: true,
                                     dotData: const FlDotData(show: false),
                                     belowBarData: BarAreaData(
-				show: true,color: Colors.greenAccent.withOpacity(0.1),),),],),),),],),),),const SizedBox(height: 10),// PANEL BAWAH: BATTERYContainer(width: double.infinity,padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),decoration: BoxDecoration(color: const Color(0xFF1E1E1E),borderRadius: BorderRadius.circular(10),),child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween,children: [Row(children: [const Icon(Icons.battery_charging_full, color: Colors.yellowAccent, size: 18),const SizedBox(width: 8),const Text('BATTERY:', style: TextStyle(color: Colors.grey, fontSize: 11)),const SizedBox(width: 5),Text('${battery.toStringAsFixed(1)} V', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13)),],),Text(isConnected ? 'LIVE MODE' : 'OFFLINE MODE', style: TextStyle(color: isConnected ? Colors.greenAccent : Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),],),),],),),);}Widget _buildSensorCard(String title, String value, String unit, IconData icon, Color color) {return Container(padding: const EdgeInsets.all(8),decoration: BoxDecoration(color: Colors.black,borderRadius: BorderRadius.circular(10),border: Border.all(color: const Color(0xFF2C2C2C)),),child: Column(crossAxisAlignment: CrossAxisAlignment.start,mainAxisAlignment: MainAxisAlignment.spaceBetween,children: [Row(mainAxisAlignment: MainAxisAlignment.spaceBetween,children: [Text(title, style: const TextStyle(color: Colors.grey, fontSize: 9, fontWeight: FontWeight.bold)),Icon(icon, color: color, size: 15),],),Row(crossAxisAlignment: CrossAxisAlignment.baseline,textBaseline: TextBaseline.alphabetic,children: [Text(value, style: const TextStyle(fontSize: 22, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: Colors.white)),const SizedBox(width: 2),Text(unit, style: const TextStyle(fontSize: 10, color: Colors.grey)),],),],),);}}
+				show: true,
+color: Colors.greenAccent.withOpacity(0.1),
+),
+),
+],
+),
+),
+),
+],
+),
+),
+),
+const SizedBox(height: 10),
+// PANEL BAWAH: BATTERY
+Container(
+width: double.infinity,
+padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+decoration: BoxDecoration(
+color: const Color(0xFF1E1E1E),
+borderRadius: BorderRadius.circular(10),),
+child: Row(
+mainAxisAlignment: MainAxisAlignment.spaceBetween,
+children: [
+Row(
+children: [
+const Icon(Icons.battery_charging_full, color: Colors.yellowAccent, size: 18),
+const SizedBox(width: 8),
+const Text('BATTERY:', style: TextStyle(color: Colors.grey, fontSize: 11)),
+const SizedBox(width: 5),
+Text('${battery.toStringAsFixed(1)} V', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13)),
+],
+),
+Text(isConnected ? 'LIVE MODE' : 'OFFLINE MODE', style: TextStyle(color: isConnected ? 
+Colors.greenAccent : Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
+],
+),
+),
+],
+),
+),
+);
+}
+Widget _buildSensorCard(String title, String value, String unit, IconData icon, Color color) {
+return Container(
+padding: const EdgeInsets.all(8),
+decoration: BoxDecoration(
+color: Colors.black,
+borderRadius: BorderRadius.circular(10),
+border: Border.all(color: const Color(0xFF2C2C2C)),
+),
+child: Column(
+crossAxisAlignment: CrossAxisAlignment.start,
+mainAxisAlignment: MainAxisAlignment.spaceBetween,
+children: [
+Row(
+mainAxisAlignment: MainAxisAlignment.spaceBetween,
+children: [
+Text(title, style: const TextStyle(color: Colors.grey, fontSize: 9, fontWeight: FontWeight.bold)),
+Icon(icon, color: color, size: 15),
+],
+),
+Row(
+crossAxisAlignment: CrossAxisAlignment.baseline,
+textBaseline: TextBaseline.alphabetic,
+children: [
+Text(value, style: const TextStyle(fontSize: 22, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: Colors.white)),
+const SizedBox(width: 2),
+Text(unit, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+],
+),
+],
+),
+);
+}
+}
