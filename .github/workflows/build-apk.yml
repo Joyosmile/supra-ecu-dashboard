@@ -1,0 +1,54 @@
+name: Build Android APK
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository Code
+        uses: actions/checkout@v4
+
+      - name: Setup Java (JDK 17)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.0'
+          channel: 'stable'
+
+      - name: Accept Android SDK Licenses
+        run: yes | sdkmanager --licenses || true
+
+      - name: Create Clean App Project
+        run: |
+          # 1. Membuat proyek baru terisolasi dari awal dengan nama paket resmi
+          flutter create -t app --org com.supra.ecu --project-name ecu_dashboard_supra clean_project
+          
+          # 2. Memindahkan file main.dart yang Anda buat ke dalam proyek bersih tersebut
+          cp -f lib/main.dart clean_project/lib/main.dart
+
+      - name: Install Dependencies
+        run: |
+          cd clean_project
+          flutter pub get
+
+      - name: Build APK (Release Mode)
+        run: |
+          cd clean_project
+          flutter build apk --release
+
+      - name: Upload APK to Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dashboard-ECU-SupraX125
+          path: clean_project/build/app/outputs/flutter-apk/app-release.apk
