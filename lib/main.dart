@@ -50,7 +50,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool isConnecting = false;
   String bufferData = "";
 
-  final String targetDeviceName = "ESP32_ECU_SCANNER"; 
+  final String targetDeviceName = "JAYA_TECH"; 
 
   // Fungsi memeriksa apakah Bluetooth di HP aktif dan meminta izin jika mati
   void connectToESP32() async {
