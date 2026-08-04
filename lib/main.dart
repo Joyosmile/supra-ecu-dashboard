@@ -142,7 +142,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 childAspectRatio: 1.3,
                 children: [
                   _buildSensorCard('VEHICLE SPEED', speed.toStringAsFixed(0), 'Km/h', Icons.speed, Colors.blueAccent),
-                  _buildSensorCard('THROTTLE (TPS)', '${tps.toStringAsFixed(1)}%', 'Pos', Icons.track_changes, Colors.greenAccent),
+                  _buildSensorCard('THROTTLE (TPS)', '${tps.toStringAsFixed(1)}%', 'Pos', Icons.adjust, Colors.greenAccent),
                   _buildSensorCard('ENG COOLANT (ECT)', '${ect.toStringAsFixed(1)}°C', 'Temp', Icons.thermostat, Colors.orangeAccent),
                   _buildSensorCard('INJECTOR DURATION', '${injDuration.toStringAsFixed(2)}ms', 'Time', Icons.av_timer, Colors.purpleAccent),
                 ],
@@ -192,7 +192,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         border: Border.all(color: const Color(0xFF2C2C2C)),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        cross CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
