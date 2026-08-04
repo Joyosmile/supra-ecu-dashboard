@@ -31,10 +31,10 @@ jobs:
 
       - name: Create Clean App Project
         run: |
-          # 1. Membuat proyek baru terisolasi dari awal dengan nama paket resmi
+          # 1. Membuat proyek baru terisolasi murni dari awal
           flutter create -t app --org com.supra.ecu --project-name ecu_dashboard_supra clean_project
           
-          # 2. Memindahkan file main.dart yang Anda buat ke dalam proyek bersih tersebut
+          # 2. Menyalin berkas main.dart dashboard ECU Anda ke dalam proyek bersih tersebut
           cp -f lib/main.dart clean_project/lib/main.dart
 
       - name: Install Dependencies
@@ -45,7 +45,8 @@ jobs:
       - name: Build APK (Release Mode)
         run: |
           cd clean_project
-          flutter build apk --release
+          # Menambahkan perintah bypass pohon ikon untuk mencegah kegagalan task kompilasi Gradle
+          flutter build apk --release --no-tree-shake-icons
 
       - name: Upload APK to Artifacts
         uses: actions/upload-artifact@v4
