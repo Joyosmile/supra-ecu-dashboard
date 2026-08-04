@@ -36,15 +36,14 @@ jobs:
 
       - name: Inject Bluetooth & Internet Permissions
         run: |
-          # Menyisipkan izin izin hardware ke AndroidManifest.xml agar aplikasi bisa scan Bluetooth & Wi-Fi
           PERMISSIONS='<uses-permission android:name="android.permission.BLUETOOTH"/>\n<uses-permission android:name="android.permission.BLUETOOTH_ADMIN"/>\n<uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>\n<uses-permission android:name="android.permission.BLUETOOTH_SCAN"/>\n<uses-permission android:name="android.permission.INTERNET"/>'
           sed -i "s|<manifest[^>]*>|\0\n$PERMISSIONS|g" clean_project/android/app/src/main/AndroidManifest.xml
 
       - name: Install Dependencies
         run: |
           cd clean_project
-          # Menambahkan library Bluetooth terpercaya untuk Flutter 3.22
-          flutter pub add flutter_bluetooth_serial
+          # Menambahkan library Bluetooth dan Grafik fl_chart
+          flutter pub add flutter_bluetooth_serial fl_chart
           flutter pub get
 
       - name: Build APK (Release Mode)
@@ -55,5 +54,5 @@ jobs:
       - name: Upload APK to Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Dashboard-ECU-SupraX125-RealTime
+          name: Dashboard-ECU-SupraX125-Graph
           path: clean_project/build/app/outputs/flutter-apk/app-release.apk
